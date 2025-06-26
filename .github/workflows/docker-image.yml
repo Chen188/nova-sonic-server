@@ -19,7 +19,7 @@ jobs:
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
     - name: Build Docker image
-      run: docker build . -t ghcr.io/${{ toLower(github.repository) }}/nova-sonic-server:latest
+      run: docker build . -t ghcr.io/chen188/nova-sonic-server:latest
 
     - name: Push Docker image
-      run: docker push ghcr.io/${{ toLower(github.repository) }}/nova-sonic-server:latest
+      run: docker push ghcr.io/chen188/nova-sonic-server:latest
