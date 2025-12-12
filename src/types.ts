@@ -9,6 +9,11 @@ export type AudioType = "SPEECH";
 export type AudioMediaType = "audio/lpcm"
 export type TextMediaType = "text/plain" | "application/json";
 
+// Generation stage for text output (used in additionalModelFields)
+export type GenerationStage = "SPECULATIVE" | "FINAL";
+
+// Stop reasons for contentEnd events
+export type StopReason = "INTERRUPTED" | "END_OF_TURN" | "MAX_TOKENS" | "STOP_SEQUENCE";
 
 export interface AudioConfiguration {
   readonly audioType: AudioType;
@@ -30,4 +35,17 @@ export interface ToolConfiguration {
   readonly textInputConfiguration: {
     readonly mediaType: "text/plain";
   };
+}
+
+// TEN-Agent compatibility types
+export interface ContentStartEvent {
+  readonly type: ContentType;
+  readonly role?: string;
+  readonly interactive?: boolean;
+  readonly additionalModelFields?: string; // JSON string containing generationStage
+}
+
+export interface ContentEndEvent {
+  readonly type?: ContentType;
+  readonly stopReason?: StopReason;
 }

@@ -1,3 +1,31 @@
+/**
+ * Nova Sonic WebSocket Server
+ * 
+ * This server provides a Socket.IO-based WebSocket interface for AWS Bedrock Nova Sonic,
+ * enabling real-time bidirectional streaming for speech-to-speech AI applications.
+ * 
+ * Compatible with:
+ * - TEN-Agent nova_sonic_python extension
+ * - Browser-based WebSocket clients
+ * 
+ * Supported Events:
+ * Client -> Server:
+ *   - promptStart: Initialize a new conversation session with voice configuration
+ *   - systemPrompt: Set the system prompt for the conversation
+ *   - audioStart: Begin audio streaming
+ *   - audioInput: Stream audio data (base64 encoded PCM)
+ *   - stopAudio: End the audio stream and close the session
+ * 
+ * Server -> Client:
+ *   - contentStart: Content generation started (includes additionalModelFields for generation stage)
+ *   - textOutput: Text response from the model
+ *   - audioOutput: Audio response from the model (base64 encoded PCM)
+ *   - contentEnd: Content generation ended (includes stopReason like 'INTERRUPTED')
+ *   - toolUse: Tool invocation request
+ *   - toolResult: Tool execution result
+ *   - error: Error information
+ *   - streamComplete: Stream completed successfully
+ */
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -9,12 +37,17 @@ import { Buffer } from 'node:buffer';
 const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
+const AWS_BEDROCK_NOVA_SONIC_MODEL_ID = process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-sonic-v1:0";
 
 // Ensure required environment variables are set
 if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
     console.error('Error: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set');
     process.exit(1);
 }
+
+console.log(`Server configuration:`);
+console.log(`  AWS Region: ${AWS_REGION}`);
+console.log(`  Nova Sonic Model ID: ${AWS_BEDROCK_NOVA_SONIC_MODEL_ID}`);
 
 // Create Express app and HTTP server
 const app = express();
@@ -58,6 +91,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Socket.IO connection handler
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
+    console.log(`Total active connections: ${Object.keys(io.sockets.sockets).length}`);
 
     // Create a unique session ID for this client
     const sessionId = socket.id;
@@ -73,7 +107,8 @@ io.on('connection', (socket) => {
                 accessKeyId: AWS_ACCESS_KEY_ID,
                 secretAccessKey: AWS_SECRET_ACCESS_KEY
             }
-        }
+        },
+        modelId: AWS_BEDROCK_NOVA_SONIC_MODEL_ID
     });
 
     // Store the client
@@ -91,17 +126,17 @@ io.on('connection', (socket) => {
 
         // Set up event handlers
         session.onEvent('contentStart', (data) => {
-            console.log('contentStart:', data);
+            console.log('contentStart:', JSON.stringify(data));
             socket.emit('contentStart', data);
         });
 
         session.onEvent('textOutput', (data) => {
-            console.log('Text output:', data);
+            console.log('Text output:', data.content ? data.content.substring(0, 50) : 'empty');
             socket.emit('textOutput', data);
         });
 
         session.onEvent('audioOutput', (data) => {
-            console.log('Audio output received, sending to client');
+            console.log('Audio output received, content length:', data.content ? data.content.length : 0);
             socket.emit('audioOutput', data);
         });
 
@@ -116,12 +151,12 @@ io.on('connection', (socket) => {
         });
 
         session.onEvent('toolResult', (data) => {
-            console.log('Tool result received');
+            console.log('Tool result received for toolUseId:', data.toolUseId);
             socket.emit('toolResult', data);
         });
 
         session.onEvent('contentEnd', (data) => {
-            console.log('Content end received: ', data);
+            console.log('Content end received, type:', data.type, 'stopReason:', data.stopReason);
             socket.emit('contentEnd', data);
         });
 
@@ -133,10 +168,21 @@ io.on('connection', (socket) => {
         // Simplified audioInput handler without rate limiting
         socket.on('audioInput', async (audioData) => {
             try {
+                if (!audioData) {
+                    console.warn('Received empty audio data');
+                    return;
+                }
+
                 // Convert base64 string to Buffer
                 const audioBuffer = typeof audioData === 'string'
                     ? Buffer.from(audioData, 'base64')
                     : Buffer.from(audioData);
+
+                // Validate buffer size
+                if (audioBuffer.length === 0) {
+                    console.warn('Received empty audio buffer');
+                    return;
+                }
 
                 // Stream the audio
                 await session.streamAudio(audioBuffer);
@@ -152,7 +198,7 @@ io.on('connection', (socket) => {
 
         socket.on('promptStart', async (data) => {
             try {
-                console.log('Prompt start received');
+                console.log('Prompt start received with voiceId:', data.voiceId);
                 await session.setupPromptStart(data.voiceId);
             } catch (error) {
                 console.error('Error processing prompt start:', error);
@@ -165,7 +211,7 @@ io.on('connection', (socket) => {
 
         socket.on('systemPrompt', async (data) => {
             try {
-                console.log('System prompt received', data);
+                console.log('System prompt received, length:', typeof data === 'string' ? data.length : 0);
                 await session.setupSystemPrompt(undefined, data);
             } catch (error) {
                 console.error('Error processing system prompt:', error);
@@ -178,7 +224,7 @@ io.on('connection', (socket) => {
 
         socket.on('audioStart', async (data) => {
             try {
-                console.log('Audio start received', data);
+                console.log('Audio start received');
                 await session.setupStartAudio();
             } catch (error) {
                 console.error('Error processing audio start:', error);
@@ -212,6 +258,7 @@ io.on('connection', (socket) => {
         // Handle disconnection
         socket.on('disconnect', async () => {
             console.log('Client disconnected abruptly:', socket.id);
+            console.log(`Total active connections: ${Object.keys(io.sockets.sockets).length}`);
 
             if (bedrockClient.isSessionActive(sessionId)) {
                 try {

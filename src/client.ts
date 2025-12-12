@@ -1,3 +1,15 @@
+/**
+ * Nova Sonic Bidirectional Stream Client
+ * 
+ * This client implements bidirectional streaming communication with AWS Bedrock Nova Sonic,
+ * providing real-time speech-to-speech conversational AI capabilities.
+ * 
+ * Compatibility:
+ * - TEN-Agent: Fully compatible with TEN-Agent's nova_sonic_python extension
+ * - Audio Format: 16kHz input, 24kHz output, 16-bit PCM, mono
+ * - Events: contentStart, textOutput, audioOutput, contentEnd, toolUse, toolResult
+ * - Generation Stages: Supports SPECULATIVE and FINAL text generation stages via additionalModelFields
+ */
 import {
   BedrockRuntimeClient,
   BedrockRuntimeClientConfig,
@@ -32,6 +44,7 @@ export interface NovaSonicBidirectionalStreamClientConfig {
   | Provider<NodeHttp2HandlerOptions | void>;
   clientConfig: Partial<BedrockRuntimeClientConfig>;
   inferenceConfig?: InferenceConfig;
+  modelId?: string;
 }
 
 export class StreamSession {
@@ -70,6 +83,12 @@ export class StreamSession {
 
   // Stream audio for this session
   public async streamAudio(audioData: Buffer): Promise<void> {
+    // Validate input
+    if (!audioData || audioData.length === 0) {
+      console.warn("Empty audio data provided to streamAudio");
+      return;
+    }
+
     // Check queue size to avoid memory issues
     if (this.audioBufferQueue.length >= this.maxQueueSize) {
       // Queue is full, drop oldest chunk
@@ -160,6 +179,7 @@ export class NovaSonicBidirectionalStreamClient {
   private sessionCleanupInProgress = new Set<string>();
   private clientConfig: Partial<BedrockRuntimeClientConfig>;
   private requestHandlerConfig: NodeHttp2HandlerOptions | Provider<NodeHttp2HandlerOptions | void>;
+  private modelId: string;
 
 
   constructor(config: NovaSonicBidirectionalStreamClientConfig) {
@@ -171,6 +191,10 @@ export class NovaSonicBidirectionalStreamClient {
       disableConcurrentStreams: false,
       maxConcurrentStreams: 20,
     };
+
+    // Set model ID from config or use default
+    this.modelId = config.modelId || process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-sonic-v1:0";
+    console.log(`Using Nova Sonic model: ${this.modelId}`);
 
     const nodeHttp2Handler = new NodeHttp2Handler({
       requestTimeout: 300000,
@@ -231,6 +255,23 @@ export class NovaSonicBidirectionalStreamClient {
       console.error("Failed to update credentials:", error);
       return false;
     }
+  }
+
+  /**
+   * Get the current model ID
+   * @returns The current model ID being used
+   */
+  public getModelId(): string {
+    return this.modelId;
+  }
+
+  /**
+   * Update the model ID
+   * @param modelId - New model ID to use
+   */
+  public setModelId(modelId: string): void {
+    this.modelId = modelId;
+    console.log(`Model ID updated to: ${this.modelId}`);
   }
 
   public isSessionActive(sessionId: string): boolean {
@@ -388,7 +429,7 @@ export class NovaSonicBidirectionalStreamClient {
 
       const response = await this.bedrockRuntimeClient.send(
         new InvokeModelWithBidirectionalStreamCommand({
-          modelId: "amazon.nova-sonic-v1:0",
+          modelId: this.modelId,
           body: asyncIterable,
         })
       );
