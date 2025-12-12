@@ -25,7 +25,7 @@ npm install
 export AWS_ACCESS_KEY_ID=<your-access-key-id>
 export AWS_SECRET_ACCESS_KEY=<your-access-key>
 export AWS_REGION=<your-aws-region>
-export AWS_BEDROCK_NOVA_SONIC_MODEL_ID=amazon.nova-sonic-v1:0  # Optional, defaults to amazon.nova-sonic-v1:0
+export AWS_BEDROCK_NOVA_SONIC_MODEL_ID=amazon.nova-2-sonic-v1:0  # Optional, defaults to amazon.nova-2-sonic-v1:0
 
 npm run start
 ```
@@ -35,7 +35,7 @@ npm run start
 - `AWS_ACCESS_KEY_ID` (required): AWS access key ID
 - `AWS_SECRET_ACCESS_KEY` (required): AWS secret access key
 - `AWS_REGION` (optional): AWS region, defaults to `us-east-1`
-- `AWS_BEDROCK_NOVA_SONIC_MODEL_ID` (optional): Nova Sonic model ID, defaults to `amazon.nova-sonic-v1:0`
+- `AWS_BEDROCK_NOVA_SONIC_MODEL_ID` (optional): Nova Sonic model ID, defaults to `amazon.nova-2-sonic-v1:0`
 - `PORT` (optional): Server port, defaults to `3333`
 - `HOST` (optional): Server host, defaults to `0.0.0.0`
 

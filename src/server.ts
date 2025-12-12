@@ -37,7 +37,7 @@ import { Buffer } from 'node:buffer';
 const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
-const AWS_BEDROCK_NOVA_SONIC_MODEL_ID = process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-sonic-v1:0";
+const AWS_BEDROCK_NOVA_SONIC_MODEL_ID = process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-2-sonic-v1:0";
 
 // Ensure required environment variables are set
 if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {

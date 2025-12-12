@@ -193,7 +193,7 @@ export class NovaSonicBidirectionalStreamClient {
     };
 
     // Set model ID from config or use default
-    this.modelId = config.modelId || process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-sonic-v1:0";
+    this.modelId = config.modelId || process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-2-sonic-v1:0";
     console.log(`Using Nova Sonic model: ${this.modelId}`);
 
     const nodeHttp2Handler = new NodeHttp2Handler({

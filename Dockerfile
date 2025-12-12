@@ -19,7 +19,7 @@ EXPOSE 3333
 
 # Set environment variables (these will be overridden by docker-compose or at runtime)
 ENV AWS_REGION=us-east-1
-ENV AWS_BEDROCK_NOVA_SONIC_MODEL_ID=amazon.nova-sonic-v1:0
+ENV AWS_BEDROCK_NOVA_SONIC_MODEL_ID=amazon.nova-2-sonic-v1:0
 
 # Run the server
 CMD ["node", "dist/server.js"]
