@@ -2,8 +2,23 @@ const io = require('socket.io-client');
 const fs = require('fs');
 const path = require('path');
 
+const sessionConfig = {
+  inferenceConfig: {
+    maxTokens: 2048,
+    topP: 0.95,
+    temperature: 0.8
+  },
+  turnDetectionConfiguration: {
+    endpointingSensitivity: "HIGH"
+  }
+};
+
 // Create a socket.io client
-const socket = io('http://localhost:3333');
+const socket = io('http://localhost:3333', {
+  query: {
+    config: JSON.stringify(sessionConfig)
+  }
+});
 
 // Event handlers
 socket.on('connect', () => {

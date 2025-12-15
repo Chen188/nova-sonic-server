@@ -1,3 +1,15 @@
+/**
+ * Nova Sonic Bidirectional Stream Client
+ * 
+ * This client implements bidirectional streaming communication with AWS Bedrock Nova Sonic,
+ * providing real-time speech-to-speech conversational AI capabilities.
+ * 
+ * Compatibility:
+ * - TEN-Agent: Fully compatible with TEN-Agent's nova_sonic_python extension
+ * - Audio Format: 16kHz input, 24kHz output, 16-bit PCM, mono
+ * - Events: contentStart, textOutput, audioOutput, contentEnd, toolUse, toolResult
+ * - Generation Stages: Supports SPECULATIVE and FINAL text generation stages via additionalModelFields
+ */
 import {
   BedrockRuntimeClient,
   BedrockRuntimeClientConfig,
@@ -13,7 +25,7 @@ import {
 import { Provider } from "@smithy/types";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
-import { InferenceConfig } from "./types";
+import { InferenceConfig, TurnDetectionConfiguration } from "./types";
 import { Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
@@ -32,6 +44,8 @@ export interface NovaSonicBidirectionalStreamClientConfig {
   | Provider<NodeHttp2HandlerOptions | void>;
   clientConfig: Partial<BedrockRuntimeClientConfig>;
   inferenceConfig?: InferenceConfig;
+  turnDetectionConfiguration?: TurnDetectionConfiguration;
+  modelId?: string;
 }
 
 export class StreamSession {
@@ -70,6 +84,12 @@ export class StreamSession {
 
   // Stream audio for this session
   public async streamAudio(audioData: Buffer): Promise<void> {
+    // Validate input
+    if (!audioData || audioData.length === 0) {
+      console.warn("Empty audio data provided to streamAudio");
+      return;
+    }
+
     // Check queue size to avoid memory issues
     if (this.audioBufferQueue.length >= this.maxQueueSize) {
       // Queue is full, drop oldest chunk
@@ -146,6 +166,7 @@ interface SessionData {
   responseHandlers: Map<string, (data: any) => void>;
   promptName: string;
   inferenceConfig: InferenceConfig;
+  turnDetectionConfiguration: TurnDetectionConfiguration;
   isActive: boolean;
   isPromptStartSent: boolean;
   isAudioContentStartSent: boolean;
@@ -155,11 +176,13 @@ interface SessionData {
 export class NovaSonicBidirectionalStreamClient {
   private bedrockRuntimeClient: BedrockRuntimeClient;
   private inferenceConfig: InferenceConfig;
+  private turnDetectionConfiguration: TurnDetectionConfiguration;
   private activeSessions: Map<string, SessionData> = new Map();
   private sessionLastActivity: Map<string, number> = new Map();
   private sessionCleanupInProgress = new Set<string>();
   private clientConfig: Partial<BedrockRuntimeClientConfig>;
   private requestHandlerConfig: NodeHttp2HandlerOptions | Provider<NodeHttp2HandlerOptions | void>;
+  private modelId: string;
 
 
   constructor(config: NovaSonicBidirectionalStreamClientConfig) {
@@ -171,6 +194,10 @@ export class NovaSonicBidirectionalStreamClient {
       disableConcurrentStreams: false,
       maxConcurrentStreams: 20,
     };
+
+    // Set model ID from config or use default
+    this.modelId = config.modelId || process.env.AWS_BEDROCK_NOVA_SONIC_MODEL_ID || "amazon.nova-2-sonic-v1:0";
+    console.log(`Using Nova Sonic model: ${this.modelId}`);
 
     const nodeHttp2Handler = new NodeHttp2Handler({
       requestTimeout: 300000,
@@ -196,6 +223,10 @@ export class NovaSonicBidirectionalStreamClient {
       topP: 0.9,
       temperature: 0.7,
     };
+
+    this.turnDetectionConfiguration = config.turnDetectionConfiguration ?? {
+      endpointingSensitivity: "MEDIUM",
+    }
   }
 
   /**
@@ -233,6 +264,23 @@ export class NovaSonicBidirectionalStreamClient {
     }
   }
 
+  /**
+   * Get the current model ID
+   * @returns The current model ID being used
+   */
+  public getModelId(): string {
+    return this.modelId;
+  }
+
+  /**
+   * Update the model ID
+   * @param modelId - New model ID to use
+   */
+  public setModelId(modelId: string): void {
+    this.modelId = modelId;
+    console.log(`Model ID updated to: ${this.modelId}`);
+  }
+
   public isSessionActive(sessionId: string): boolean {
     const session = this.activeSessions.get(sessionId);
     return !!session && session.isActive;
@@ -256,7 +304,7 @@ export class NovaSonicBidirectionalStreamClient {
 
 
   // Create a new streaming session
-  public createStreamSession(sessionId: string = randomUUID(), config?: NovaSonicBidirectionalStreamClientConfig): StreamSession {
+  public createStreamSession(sessionId: string = randomUUID(), sessionConfig?: Partial<NovaSonicBidirectionalStreamClientConfig>): StreamSession {
     if (this.activeSessions.has(sessionId)) {
       throw new Error(`Stream session with ID ${sessionId} already exists`);
     }
@@ -271,7 +319,8 @@ export class NovaSonicBidirectionalStreamClient {
       toolName: "",
       responseHandlers: new Map(),
       promptName: randomUUID(),
-      inferenceConfig: config?.inferenceConfig ?? this.inferenceConfig,
+      inferenceConfig: sessionConfig?.inferenceConfig ?? this.inferenceConfig,
+      turnDetectionConfiguration: sessionConfig?.turnDetectionConfiguration ?? this.turnDetectionConfiguration,
       isActive: true,
       isPromptStartSent: false,
       isAudioContentStartSent: false,
@@ -388,7 +437,7 @@ export class NovaSonicBidirectionalStreamClient {
 
       const response = await this.bedrockRuntimeClient.send(
         new InvokeModelWithBidirectionalStreamCommand({
-          modelId: "amazon.nova-sonic-v1:0",
+          modelId: this.modelId,
           body: asyncIterable,
         })
       );
@@ -688,7 +737,8 @@ export class NovaSonicBidirectionalStreamClient {
     this.addEventToSessionQueue(sessionId, {
       event: {
         sessionStart: {
-          inferenceConfiguration: session.inferenceConfig
+          inferenceConfiguration: session.inferenceConfig,
+          turnDetectionConfiguration: session.turnDetectionConfiguration
         }
       }
     });
