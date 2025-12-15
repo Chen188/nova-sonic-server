@@ -25,7 +25,7 @@ import {
 import { Provider } from "@smithy/types";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
-import { InferenceConfig } from "./types";
+import { InferenceConfig, TurnDetectionConfiguration } from "./types";
 import { Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
@@ -44,6 +44,7 @@ export interface NovaSonicBidirectionalStreamClientConfig {
   | Provider<NodeHttp2HandlerOptions | void>;
   clientConfig: Partial<BedrockRuntimeClientConfig>;
   inferenceConfig?: InferenceConfig;
+  turnDetectionConfiguration?: TurnDetectionConfiguration;
   modelId?: string;
 }
 
@@ -165,6 +166,7 @@ interface SessionData {
   responseHandlers: Map<string, (data: any) => void>;
   promptName: string;
   inferenceConfig: InferenceConfig;
+  turnDetectionConfiguration: TurnDetectionConfiguration;
   isActive: boolean;
   isPromptStartSent: boolean;
   isAudioContentStartSent: boolean;
@@ -174,6 +176,7 @@ interface SessionData {
 export class NovaSonicBidirectionalStreamClient {
   private bedrockRuntimeClient: BedrockRuntimeClient;
   private inferenceConfig: InferenceConfig;
+  private turnDetectionConfiguration: TurnDetectionConfiguration;
   private activeSessions: Map<string, SessionData> = new Map();
   private sessionLastActivity: Map<string, number> = new Map();
   private sessionCleanupInProgress = new Set<string>();
@@ -220,6 +223,10 @@ export class NovaSonicBidirectionalStreamClient {
       topP: 0.9,
       temperature: 0.7,
     };
+
+    this.turnDetectionConfiguration = config.turnDetectionConfiguration ?? {
+      endpointingSensitivity: "MEDIUM",
+    }
   }
 
   /**
@@ -297,7 +304,7 @@ export class NovaSonicBidirectionalStreamClient {
 
 
   // Create a new streaming session
-  public createStreamSession(sessionId: string = randomUUID(), config?: NovaSonicBidirectionalStreamClientConfig): StreamSession {
+  public createStreamSession(sessionId: string = randomUUID(), sessionConfig?: Partial<NovaSonicBidirectionalStreamClientConfig>): StreamSession {
     if (this.activeSessions.has(sessionId)) {
       throw new Error(`Stream session with ID ${sessionId} already exists`);
     }
@@ -312,7 +319,8 @@ export class NovaSonicBidirectionalStreamClient {
       toolName: "",
       responseHandlers: new Map(),
       promptName: randomUUID(),
-      inferenceConfig: config?.inferenceConfig ?? this.inferenceConfig,
+      inferenceConfig: sessionConfig?.inferenceConfig ?? this.inferenceConfig,
+      turnDetectionConfiguration: sessionConfig?.turnDetectionConfiguration ?? this.turnDetectionConfiguration,
       isActive: true,
       isPromptStartSent: false,
       isAudioContentStartSent: false,
@@ -729,7 +737,8 @@ export class NovaSonicBidirectionalStreamClient {
     this.addEventToSessionQueue(sessionId, {
       event: {
         sessionStart: {
-          inferenceConfiguration: session.inferenceConfig
+          inferenceConfiguration: session.inferenceConfig,
+          turnDetectionConfiguration: session.turnDetectionConfiguration
         }
       }
     });

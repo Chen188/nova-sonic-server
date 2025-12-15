@@ -96,6 +96,11 @@ io.on('connection', (socket) => {
     // Create a unique session ID for this client
     const sessionId = socket.id;
 
+    // Extract session config from handshake query parameters (if provided)
+    const handshakeConfig = socket.handshake.query.config 
+        ? JSON.parse(socket.handshake.query.config as string) 
+        : {};
+
     // Create a new Bedrock client for this connection
     const bedrockClient = new NovaSonicBidirectionalStreamClient({
         requestHandlerConfig: {
@@ -115,8 +120,8 @@ io.on('connection', (socket) => {
     bedrockClients.set(sessionId, bedrockClient);
 
     try {
-        // Create session with the new API
-        const session = bedrockClient.createStreamSession(sessionId);
+        // Create session with the new API, passing session-specific config
+        const session = bedrockClient.createStreamSession(sessionId, handshakeConfig);
         bedrockClient.initiateSession(sessionId)
 
         setInterval(() => {
@@ -196,7 +201,7 @@ io.on('connection', (socket) => {
             }
         });
 
-        socket.on('promptStart', async (data) => {
+        socket.on('promptStart', async (data = {}) => {
             try {
                 console.log('Prompt start received with voiceId:', data.voiceId);
                 await session.setupPromptStart(data.voiceId);
