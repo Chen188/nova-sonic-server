@@ -101,6 +101,12 @@ io.on('connection', (socket) => {
         ? JSON.parse(socket.handshake.query.config as string) 
         : {};
 
+    // Allow per-connection model override (e.g. Nova 2.5 Sonic graph), restricted to Nova Sonic models
+    const modelId = typeof handshakeConfig.modelId === 'string' && handshakeConfig.modelId.includes('sonic')
+        ? handshakeConfig.modelId
+        : AWS_BEDROCK_NOVA_SONIC_MODEL_ID;
+    console.log(`Session ${sessionId} using model: ${modelId}`);
+
     // Create a new Bedrock client for this connection
     const bedrockClient = new NovaSonicBidirectionalStreamClient({
         requestHandlerConfig: {
@@ -113,7 +119,7 @@ io.on('connection', (socket) => {
                 secretAccessKey: AWS_SECRET_ACCESS_KEY
             }
         },
-        modelId: AWS_BEDROCK_NOVA_SONIC_MODEL_ID
+        modelId
     });
 
     // Store the client
